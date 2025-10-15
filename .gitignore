@@ -1,0 +1,6 @@
+*.xlsx
+*.env
+.env
+.log
+.rej
+.orig
