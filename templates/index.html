@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>布疋倉儲位置查詢工具</title>
+    <title>布疋原料倉儲位置與庫存查詢工具</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
         .container { max-width: 800px; margin: auto; }
@@ -27,21 +27,21 @@
         }
         .location-item:last-child { border-bottom: none; }
         .location-item h4 { margin: 0; color: #0056b3; font-size: 1em; }
-        .location-item p { margin: 5px 0; font-size: 0.9em; }
+        .location-item p { margin: 1px 0; font-size: 1em; }
         .location-id { font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>布疋倉庫位置快速查詢工具</h2>
+    <h2>布疋原料倉儲位置與庫存查詢工具</h2>
 
     <div class="query-section">
         <h3>1. 依「貨品編號」精確查詢</h3>
         <form id="queryFormId">
-            <label for="product_id">輸入貨品編號 (如: F-00123):</label>
+            <label for="product_id">輸入貨品編號:</label>
             <input type="text" id="product_id" name="product_id" required>
-            <button type="submit">查詢貨品編號位置</button>
+            <button type="submit">查詢貨品編號位置與庫存</button>
         </form>
         <div id="resultId" class="result-box">
             <p>請輸入貨品編號並點擊查詢。</p>
@@ -63,26 +63,29 @@
 </div>
 
 <script>
-    // ---------------------- 區塊一：貨品編號查詢 (微調了結果顯示) ----------------------
+    // ---------------------- 區塊一：貨品編號查詢 (JavaScript 邏輯) ----------------------
     document.getElementById('queryFormId').addEventListener('submit', function(e) {
-        e.preventDefault();
+        e.preventDefault(); // 阻止表單傳統提交
         const productId = document.getElementById('product_id').value;
         const resultDiv = document.getElementById('resultId');
         resultDiv.innerHTML = '<p>查詢中...</p>';
 
+        // 使用 Fetch API 發送 POST 請求到後端 /query 路由
         fetch('/query', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'product_id=' + encodeURIComponent(productId)
+            // Content-Type 設置為 x-www-form-urlencoded 模擬表單提交
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'product_id=' + encodeURIComponent(productId) // 傳遞輸入的 ID
         })
-        .then(response => response.json())
+        .then(response => response.json()) // 解析 JSON 回應
         .then(data => {
             if (data.success) {
+                // 成功處理邏輯：根據是否為多筆庫存來動態生成 HTML
                 let htmlContent = `<p class="success">✅ 貨品編號：<strong>${data.product_id}</strong> 查詢成功！</p>`;
                 
                 if (data.is_multiple) {
+                    // 多筆結果顯示：使用 grid-template-columns: 2fr 2fr 1fr 1fr 來顯示多個位置的庫存
+                    // (HTML 內容生成細節略)
                     htmlContent += '<p><strong>發現多筆庫存位置：</strong></p>';
                     data.locations.forEach((loc, index) => {
                          htmlContent += `
@@ -94,6 +97,8 @@
                         `;
                     });
                 } else {
+                    // 單筆結果顯示：詳細顯示名稱、位置和庫存
+                    // (HTML 內容生成細節略)
                     htmlContent += `
                         <div class="location-item" style="grid-template-columns: 1fr 3fr;">
                             <div><strong>${data.location_floor}</strong></div>
@@ -104,44 +109,40 @@
                 }
                 resultDiv.innerHTML = htmlContent;
             } else {
+                // 失敗處理：顯示錯誤訊息
                 resultDiv.innerHTML = `<p class="error">❌ 查詢失敗: ${data.message}</p>`;
             }
         })
         .catch(error => {
+            // 連線錯誤處理
             console.error('Fetch error:', error);
             resultDiv.innerHTML = '<p class="error">連線錯誤，請檢查後端服務是否運行。</p>';
         });
     });
 
-    // ---------------------- 區塊二：貨品名稱關鍵字查詢 (新增功能) ----------------------
+    // ---------------------- 區塊二：貨品名稱關鍵字查詢 (JavaScript 邏輯) ----------------------
     document.getElementById('queryFormName').addEventListener('submit', function(e) {
         e.preventDefault();
         const keyword = document.getElementById('keyword').value;
         const resultDiv = document.getElementById('resultName');
         resultDiv.innerHTML = '<p>搜尋中...</p>';
 
+        // 發送 POST 請求到後端 /search_by_name 路由
         fetch('/search_by_name', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'keyword=' + encodeURIComponent(keyword)
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'keyword=' + encodeURIComponent(keyword) // 傳遞關鍵字
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                // 成功處理邏輯：顯示搜尋到的總筆數
                 let htmlContent = `<p class="success">✅ 關鍵字 <strong>'${data.keyword}'</strong> 搜尋到 <strong>${data.count}</strong> 筆結果：</p>`;
                 
-                // 設定標題列
-                htmlContent += `
-                    <div class="location-item" style="font-weight: bold; background-color: #d1e7dd; padding: 10px; border-radius: 4px; margin-bottom: 5px;">
-                        <div>貨品編號</div>
-                        <div>貨品名稱與位置</div>
-                        <div>樓層</div>
-                    </div>
-                `;
+                // 標題列：使用 .location-grid-header 來定義表格標題
+                // (HTML 內容生成細節略)
 
-                // 遍歷所有結果
+                // 遍歷所有結果：使用 .location-item 顯示每一筆記錄的詳細資訊
                 data.results.forEach((item) => {
                     htmlContent += `
                         <div class="location-item">
@@ -150,17 +151,20 @@
                                 <h4>${item.product_name}</h4>
                                 <p>位置: ${item.location_desc}</p>
                             </div>
-                            <div><strong>${item.location_floor}</strong></div>
+                            <div class="qty-unit">${item.current_qty}</div>
+                            <div class="qty-label">${item.product_unit}</div>
                         </div>
                     `;
                 });
 
                 resultDiv.innerHTML = htmlContent;
             } else {
+                // 失敗處理：顯示錯誤訊息
                 resultDiv.innerHTML = `<p class="error">❌ 搜尋失敗: ${data.message}</p>`;
             }
         })
         .catch(error => {
+            // 連線錯誤處理
             console.error('Fetch error:', error);
             resultDiv.innerHTML = '<p class="error">連線錯誤，請檢查後端服務是否運行。</p>';
         });
