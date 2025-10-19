@@ -118,6 +118,7 @@ def query_inventory():
             """輔助函式：統一整理結果的資料格式，並計算地圖檔名"""
             location_desc = data[COL_LOCATION_DESC]
             map_info = get_map_info_dynamic(location_desc) # 動態獲取地圖資訊
+            print(location_desc)
             return {
                 'location_desc': location_desc,
                 'product_name': data[COL_PRODUCT_NAME],
@@ -181,6 +182,7 @@ def search_by_name():
                 'product_name': row[COL_PRODUCT_NAME],
                 'product_unit': row[COL_UNIT],
                 'current_qty': format_qty(row[COL_QTY]),
+                'location_desc': row[COL_LOCATION_DESC],
                 # 將地圖資訊直接附加到每一筆結果中
                 **get_map_info_dynamic(row[COL_LOCATION_DESC])
             },

@@ -1,4 +1,4 @@
-# 布疋倉儲位置查詢工具
+# 布疋倉儲位置查詢工具 ver3.0
 
 ## 這是一個實際的倉儲管理優化專案！能理解布疋體積大、重量重，加上位置零散，尋找起來確實非常耗時耗力。 利用現有的 Excel 資料，建立一個 Flask 網頁查詢小工具是一個非常好的起步。  以下設計了一個完整的 Python (Flask) 應用程式，使用常見且穩定的套件 pandas 處理 Excel，Flask 建立網頁服務，能透過輸入貨品編號、貨品名稱，快速查詢其所在位置。
 
@@ -17,8 +17,19 @@ pip install Flask pandas openpyxl
 inventory-tool/
 ├── app.py          (Python 後端程式)
 ├── inventory.xlsx  (您的 Excel 資料庫)
-└── /templates
-    └── index.html  (網頁前端介面)
+├── /templates
+|   └── index.html  (網頁前端介面)
+├── location_areas.json (儲位定義檔)
+├── /static
+|   └── /maps
+|       └──Map_I2F_Area.png
+|       └──Map_I3F_Area.png
+|       └──Map_I1F_Area.png
+|       └──I3-xx.png xx=01~
+|       └──I2-xx.png xx=01~
+|       └──I1-xx.png xx=01~
+|       └──Map_R_Area.png
+
 ```
 
 
@@ -33,9 +44,36 @@ R4-2	   S-45678	   針織布-90"-刷毛-米黃色	KG	           567.89
 I1-05	   T-98765	   平織布-100"-印花-紅色	METER	        88
 
 ```
+2. 新增儲位定義檔 (敏感資訊屏蔽)
+後端程式中可以用來動態判定是哪一區域去對應地圖檔, 
+```json
+{
+    "RACKAGE": {
+        "prefix": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+        "area_name": "R區（xxxxxx區）",
+        "area_map_filename": "R_Area_imagename.png"
+    },
+    "INVENTORY_1F": {
+        "prefix": ["I1-"],
+        "area_name": "I1 (xxxxxx區)",
+        "area_map_filename": "I1_Area_imagename.png"
+    },
+    "INVENTORY_2F": {
+        "prefix": ["I2-"],
+        "area_name": "I2 (xxxxxx區)",
+        "area_map_filename": "I2_Area_imagename.png"
+    },
+    "INVENTORY_3F": {
+        "prefix": ["I3-"],
+        "area_name": "I3 (xxxxxx區)",
+        "area_map_filename": "I3_Area_imagename.png"
+    }
+}
+```
 
-2. Python (Flask)為後端程式 (app.py)
-3. HTML 網頁前端 (templates/index.html)
+
+3. Python (Flask)為後端程式 (app.py)
+4. HTML 網頁前端 (templates/index.html)
 
 ## 啟動服務:
 在終端機 (Command Prompt/Terminal) 中，進入 your_project_folder 資料夾，執行：
@@ -60,17 +98,24 @@ F-00123	平織布-100"-印花-白色 (位置: 主倉儲區 A01 料架 第 2�
 T-98765	平織布-100"-印花-紅色 (位置: 棧板區 P05)	3F
 ```
 
+## 總結：最務實的架構和部署要求
+
+|項目|	描述|	變動時的修改點|
+|---|---|---|
+|資料來源|	inventory.xlsx (最新 I 區儲位)|	* 貨品移動時必須更新|
+|區域定義|	location_areas.json|	僅當 I 區前綴變動時修改|
+|總覽地圖|	static/maps/I2_Area_imagename.png|	僅當 I 區總體佈局變動時更新|
+|局部放大圖|	static/maps/I2-xx.png (預先截圖的 200x200px 局部圖)|	僅當 I2-xx 儲位細節變動時，重新截圖並覆蓋 I2-xx.png|
+|程式邏輯|	app.py|	保持不變，只負責根據 I2-xx 欄位產生兩個圖片檔名。|
+
+
+
 ## 優勢與建議
 * 資料快速存取: pandas 預先將 Excel 資料載入記憶體中，並設定貨品編號為索引，查詢速度極快。
-
 * 熱切換資料庫: 每次重新啟動 Flask 服務時，它都會讀取最新的 inventory.xlsx 檔案，您只需要確保檔案更新即可。
-
 * 多位置處理: 程式碼考慮到同一個貨品編號可能存在於多個位置（例如布疋在不同料架上還有剩餘），查詢結果能一併顯示。
 
 ## 未來優化方向 (當熟悉 ERP 後):
-
 * 資料庫升級: 將 Excel 資料庫替換為真正的資料庫 (SQLite, MySQL 或 PostgreSQL)，可實現更穩定的併發讀取與寫入，並與 ERP 進行資料同步。
-
 * 直接串接 ERP API: 最理想的方式是直接透過程式碼呼叫 ERP 的 API 或資料庫連線，取得即時庫存位置資訊，徹底擺脫匯出 Excel 的步驟。
-
 * 加入地圖連結: 如果「具體位置描述」能對應到您繪製的「地圖映射」，可以在網頁上加入連結或圖片，讓現場人員點擊後能直接看到該位置的地圖。
