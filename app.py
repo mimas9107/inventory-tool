@@ -1,42 +1,92 @@
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
+import json
+import os
 
-# ----------------- 配置 (欄位名稱定義) -----------------
+# ----------------- 配置與常量 -----------------
 EXCEL_FILE = 'inventory.xlsx'
-# 根據 Excel 檔案的標題列定義變數，確保程式碼與資料源的欄位名稱一致
-COL_LOCATION_DESC = '所在位置'      
+AREA_CONFIG_FILE = 'location_areas.json'
+MAP_RULES = {}
+
+# Excel 欄位定義 (應與您的 Excel 標題列一致)
+COL_LOCATION_DESC = '所在位置'
 COL_PRODUCT_ID = '貨品編號'
 COL_PRODUCT_NAME = '貨品名稱'
-COL_UNIT = '貨品基本單位'          
-COL_QTY = '庫存量'                 
+COL_UNIT = '貨品基本單位'
+COL_QTY = '庫存量'
 
-# 指定要載入的欄位列表。由於使用欄位名稱，Excel中的順序不影響程式運行
 COLUMNS_TO_LOAD = [COL_LOCATION_DESC, COL_PRODUCT_ID, COL_PRODUCT_NAME, COL_UNIT, COL_QTY]
 
 app = Flask(__name__)
 
-# 格式化庫存量 (小數點後四位) 的輔助函式
+# ----------------- 數據處理函式 -----------------
+
 def format_qty(qty):
     """將庫存量格式化為小數點後四位的字串，用於前端顯示"""
     try:
         return f"{float(qty):.4f}"
     except (ValueError, TypeError):
-        return "N/A" # 處理非數值或空值的情況
+        return "N/A"
 
-# ----------------- 資料載入區 (服務啟動時只執行一次) -----------------
-try:
-    # 讀取 Excel：使用 openpyxl 引擎，並僅載入 COLUMNS_TO_LOAD 中指定的欄位
-    inventory_df = pd.read_excel(EXCEL_FILE, engine='openpyxl', usecols=COLUMNS_TO_LOAD)
+def load_area_config():
+    """載入倉儲區域定義配置檔 (location_areas.json)"""
+    global MAP_RULES
+    try:
+        with open(AREA_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            MAP_RULES = json.load(f)
+        print(f"成功載入地圖配置檔：{AREA_CONFIG_FILE}")
+    except FileNotFoundError:
+        print(f"錯誤：找不到配置檔 {AREA_CONFIG_FILE}。地圖功能將無法使用。")
+    except Exception as e:
+        print(f"載入配置檔時發生錯誤：{e}")
+load_area_config() # 服務啟動時載入配置
+
+def get_map_info_dynamic(location_desc):
+    """
+    根據「所在位置」名稱動態判斷並回傳地圖資訊。
+    這是應對 I 區儲位變動的核心彈性區塊。
+    """
+    location_desc = str(location_desc).upper().strip()
+    result = {
+        'area_name': '未定義區域',           # 區域的文字名稱 (例如: I區 2樓)
+        'area_map_filename': '',         # 總覽地圖檔名 (例如: Map_I2F_Area.png)
+        'detail_map_filename': ''        # 局部細節地圖檔名 (例如: I2-03.png)
+    }
     
-    # 確保關鍵欄位為字串並清除前後空白，避免查詢匹配失敗
+    if not location_desc:
+        return result
+
+    # 遍歷配置中的所有區域，尋找匹配項
+    for config in MAP_RULES.values():
+        if isinstance(config.get('prefix'), list):
+            for prefix in config['prefix']:
+                if location_desc.startswith(prefix.upper()):
+                    # 匹配成功，設置區域總覽地圖資訊
+                    result['area_name'] = config.get('area_name', '未知區域')
+                    result['area_map_filename'] = config.get('area_map_filename', '')
+                    
+                    # 根據使用者需求：局部地圖檔名就是精確的儲位編號 + .png
+                    # (例如 I2-03 會對應到 I2-03.png)
+                    result['detail_map_filename'] = f"{location_desc}.png"
+                    return result
+    
+    # 找不到匹配的前綴
+    return result
+
+
+# ----------------- 資料載入與初始化 -----------------
+
+try:
+    # 假設 Excel 檔案存在，且欄位名稱正確
+    inventory_df = pd.read_excel(EXCEL_FILE, engine='openpyxl', usecols=COLUMNS_TO_LOAD)
+
+    # 確保關鍵欄位為字串並清除前後空白
     inventory_df[COL_PRODUCT_ID] = inventory_df[COL_PRODUCT_ID].astype(str).str.strip()
     inventory_df[COL_PRODUCT_NAME] = inventory_df[COL_PRODUCT_NAME].astype(str).str.strip()
     inventory_df[COL_UNIT] = inventory_df[COL_UNIT].astype(str).str.strip()
-
-    # 將庫存量轉換為數值 (float)，如果遇到非數值資料則設為 NaN (Not a Number)
+    inventory_df[COL_LOCATION_DESC] = inventory_df[COL_LOCATION_DESC].astype(str).str.strip()
     inventory_df[COL_QTY] = pd.to_numeric(inventory_df[COL_QTY], errors='coerce')
 
-    # 設定 '貨品編號' 為 DataFrame 的索引，以便使用 .loc 進行快速、精確查詢
     inventory_df.set_index(COL_PRODUCT_ID, inplace=True)
     print(f"成功載入資料：{EXCEL_FILE}，總筆數：{len(inventory_df)}")
 except FileNotFoundError:
@@ -45,6 +95,7 @@ except FileNotFoundError:
 except Exception as e:
     print(f"載入 Excel 檔案時發生錯誤：{e}")
     inventory_df = pd.DataFrame()
+
 
 # ----------------- 路由定義 -----------------
 
@@ -55,40 +106,39 @@ def index():
 
 @app.route('/query', methods=['POST'])
 def query_inventory():
-    """處理貨品編號精確查詢 (區塊 1)"""
-    
+    """處理貨品編號精確查詢"""
+    if inventory_df.empty: return jsonify({'success': False, 'message': '資料庫載入失敗或為空。'})
     product_id = request.form.get('product_id', '').strip()
-    if not product_id:
-        return jsonify({'success': False, 'message': '請輸入貨品編號。'})
-    
+    if not product_id: return jsonify({'success': False, 'message': '請輸入貨品編號。'})
+
     try:
-        # 使用索引 (loc) 進行精確查詢
         location_data = inventory_df.loc[product_id]
-        
-        # 檢查結果是單筆 (Series) 還是多筆 (DataFrame)
+
+        def format_result_data(data):
+            """輔助函式：統一整理結果的資料格式，並計算地圖檔名"""
+            location_desc = data[COL_LOCATION_DESC]
+            map_info = get_map_info_dynamic(location_desc) # 動態獲取地圖資訊
+            return {
+                'location_desc': location_desc,
+                'product_name': data[COL_PRODUCT_NAME],
+                'product_unit': data[COL_UNIT],
+                'current_qty': format_qty(data[COL_QTY]),
+                'area_name': map_info['area_name'],
+                'area_map_filename': map_info['area_map_filename'],
+                'detail_map_filename': map_info['detail_map_filename']
+            }
+
         if isinstance(location_data, pd.Series):
-            # 單一匹配：直接整理成字典回傳
+            # 單筆匹配
             result = {
                 'success': True,
                 'product_id': product_id,
-                'location_desc': location_data[COL_LOCATION_DESC],
-                'product_name': location_data[COL_PRODUCT_NAME],
-                'product_unit': location_data[COL_UNIT],
-                'current_qty': format_qty(location_data[COL_QTY]), # 格式化庫存量
+                **format_result_data(location_data), # 展開所有欄位
                 'is_multiple': False
             }
         elif isinstance(location_data, pd.DataFrame):
-            # 多重匹配：整理成列表回傳給前端
-            locations = location_data.apply(
-                lambda row: {
-                    'location_desc': row[COL_LOCATION_DESC],
-                    'product_name': row[COL_PRODUCT_NAME],
-                    'product_unit': row[COL_UNIT],
-                    'current_qty': format_qty(row[COL_QTY])
-                },
-                axis=1
-            ).tolist()
-            
+            # 多重匹配 (多個位置)
+            locations = location_data.apply(format_result_data, axis=1).tolist()
             result = {
                 'success': True,
                 'product_id': product_id,
@@ -101,45 +151,42 @@ def query_inventory():
         return jsonify(result)
 
     except KeyError:
-        # 找不到該 ID 的錯誤處理
         return jsonify({'success': False, 'message': f"找不到貨品編號：{product_id} 的庫存記錄。"})
+    except Exception as e:
+        print(f"查詢時發生錯誤：{e}")
+        return jsonify({'success': False, 'message': '伺服器內部查詢錯誤，請聯繫管理員。'})
 
 
 @app.route('/search_by_name', methods=['POST'])
 def search_by_name():
-    """處理貨品名稱關鍵字模糊查詢 (區塊 2)"""
-    
+    """處理貨品名稱關鍵字模糊查詢"""
+    if inventory_df.empty: return jsonify({'success': False, 'message': '資料庫載入失敗或為空。'})
     keyword = request.form.get('keyword', '').strip()
-    if not keyword:
-        return jsonify({'success': False, 'message': '請輸入貨品名稱的關鍵字。'})
+    if not keyword: return jsonify({'success': False, 'message': '請輸入貨品名稱的關鍵字。'})
 
     try:
-        # 為了對 '貨品名稱' 欄位操作，需要暫時重置索引
         results_df = inventory_df.reset_index()
-        
-        # 核心：使用 str.contains 進行大小寫不敏感 (case=False) 的模糊比對
         matched_rows = results_df[
             results_df[COL_PRODUCT_NAME].str.contains(keyword, case=False, na=False)
         ]
 
         if matched_rows.empty:
-            return jsonify({
-                'success': False,
-                'message': f"找不到包含關鍵字：'{keyword}' 的任何貨品。"
+            return jsonify({'success': False, 'message': f"找不到包含關鍵字：'{keyword}' 的任何貨品。"
             })
 
-        # 整理結果：將所有匹配的列轉換為 JSON 格式
+        # 整理結果 (包含地圖資訊)
         search_results = matched_rows.apply(
             lambda row: {
                 'product_id': row[COL_PRODUCT_ID],
                 'product_name': row[COL_PRODUCT_NAME],
-                'location_desc': row[COL_LOCATION_DESC],
-                'product_unit': row[COL_UNIT],         
-                'current_qty': format_qty(row[COL_QTY]) 
+                'product_unit': row[COL_UNIT],
+                'current_qty': format_qty(row[COL_QTY]),
+                # 將地圖資訊直接附加到每一筆結果中
+                **get_map_info_dynamic(row[COL_LOCATION_DESC])
             },
             axis=1
         ).tolist()
-        
+
         return jsonify({
             'success': True,
             'keyword': keyword,
@@ -152,9 +199,5 @@ def search_by_name():
         return jsonify({'success': False, 'message': '伺服器內部關鍵字搜尋錯誤，請聯繫管理員。'})
 
 
-# ----------------- 啟動服務 -----------------
-
 if __name__ == '__main__':
-    # host='0.0.0.0' 允許從外部網路訪問 (在公司內部網路部署時很有用)
-    # debug=True 方便開發調試
     app.run(host='0.0.0.0', port=5000, debug=True)

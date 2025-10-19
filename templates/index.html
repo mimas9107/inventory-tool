@@ -3,153 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>布疋原料倉儲位置與庫存查詢工具</title>
+    <title>布疋倉儲位置與庫存查詢（動態地圖版）</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { max-width: 800px; margin: auto; }
-        .query-section {
-            background: white; padding: 30px; border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 30px;
-        }
-        h2 { text-align: center; color: #333; margin-top: 0; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; }
-        input[type="text"] { width: calc(100% - 22px); padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 4px; }
-        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-bottom: 10px;}
-        button:hover { background-color: #0056b3; }
-        .result-box { margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #e9ecef; }
-        .error { color: #dc3545; font-weight: bold; }
+        body { font-family: 'Inter', sans-serif; background-color: #f4f7f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background-color: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+        h2, h3 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 5px; margin-bottom: 20px; }
+        .query-section { margin-bottom: 40px; padding: 20px; background-color: #f9f9f9; border-radius: 8px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { padding: 10px; border: 1px solid #ccc; border-radius: 6px; width: 300px; margin-right: 10px; }
+        button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #45a049; }
+        
+        .result-box { margin-top: 15px; padding: 15px; border-radius: 6px; background-color: #fff; border: 1px solid #ddd; }
         .success { color: #28a745; font-weight: bold; }
-        .location-item {
-            border-bottom: 1px solid #ddd; padding: 10px 0;
+        .error { color: #dc3545; font-weight: bold; }
+
+        /* 查詢結果 Grid */
+        .grid-header { font-weight: bold; background-color: #e9ecef; padding: 10px; border-radius: 6px 6px 0 0; }
+        .location-grid-header, .location-item {
             display: grid;
-            grid-template-columns: 1fr 2fr 1fr; /* 布局：編號 | 名稱/位置 | 樓層 */
+            /* 定義五個欄位的寬度比例：ID | 名稱/位置 | 庫存量 | 單位 */
+            grid-template-columns: 1.5fr 3.5fr 1fr 1fr;
             gap: 10px;
+            padding: 10px;
+            align-items: center;
         }
-        .location-item:last-child { border-bottom: none; }
-        .location-item h4 { margin: 0; color: #0056b3; font-size: 1em; }
-        .location-item p { margin: 1px 0; font-size: 1em; }
+        .location-item {
+            border-top: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .location-item:hover { background-color: #e0f7fa; }
+        .location-item.selected { background-color: #d1e7dd; border: 1px solid #28a745; }
         .location-id { font-weight: bold; }
+        .location-desc { color: #007bff; font-weight: bold; }
+        
+        /* 地圖顯示區 */
+        .map-wrapper {
+            display: flex;
+            gap: 20px;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px dashed #ccc;
+        }
+        .map-container {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #0056b3;
+            border-radius: 8px;
+            background-color: #ffffff;
+            text-align: center;
+        }
+        .map-container h4 {
+            color: #0056b3;
+            margin-top: 0;
+            padding-bottom: 5px;
+        }
+        .location-map {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none; /* 預設隱藏，載入圖片後顯示 */
+        }
+        .detail-map { max-width: 250px; } /* 局部地圖可以小一點 */
+        .map-placeholder { padding: 50px 10px; color: #6c757d; font-style: italic; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>布疋原料倉儲位置與庫存查詢工具</h2>
+    <h2>布疋倉庫位置與庫存查詢（動態地圖版）</h2>
 
+    <!-- 區塊一：貨品編號 精確查詢 -->
     <div class="query-section">
         <h3>1. 依「貨品編號」精確查詢</h3>
         <form id="queryFormId">
-            <label for="product_id">輸入貨品編號:</label>
-            <input type="text" id="product_id" name="product_id" required>
-            <button type="submit">查詢貨品編號位置與庫存</button>
+            <input type="text" id="product_id" name="product_id" placeholder="請輸入貨品編號..." required>
+            <button type="submit">查詢位置與地圖</button>
         </form>
         <div id="resultId" class="result-box">
             <p>請輸入貨品編號並點擊查詢。</p>
         </div>
     </div>
     
+    <!-- 區塊二：貨品名稱 關鍵字模糊查詢 -->
     <div class="query-section">
         <h3>2. 依「貨品名稱」關鍵字模糊查詢</h3>
         <form id="queryFormName">
-            <label for="keyword">輸入貨品名稱關鍵字 (如: 印花、刷毛、紅色):</label>
-            <input type="text" id="keyword" name="keyword" required>
-            <button type="submit" style="background-color: #28a745;">關鍵字搜尋</button>
+            <input type="text" id="keyword" name="keyword" placeholder="請輸入貨品名稱關鍵字..." required>
+            <button type="submit">關鍵字搜尋與地圖</button>
         </form>
         <div id="resultName" class="result-box">
             <p>請輸入關鍵字並點擊搜尋。</p>
         </div>
     </div>
     
+    <!-- 地圖顯示區塊 (共用，用於顯示點擊結果) -->
+    <div id="mapContainerWrapper" class="map-wrapper" style="display: none;">
+        
+        <!-- 總覽地圖 (Area Map) -->
+        <div id="areaMapDisplay" class="map-container">
+            <h4 id="areaMapTitle">倉庫總覽區域圖</h4>
+            <div id="areaMapPlaceholder" class="map-placeholder">等待查詢或點擊結果...</div>
+            <img id="areaMapImage" class="location-map" src="" alt="倉庫總覽圖">
+        </div>
+
+        <!-- 局部地圖 (Detail Map) -->
+        <div id="detailMapDisplay" class="map-container">
+            <h4 id="detailMapTitle">儲位局部放大圖 (<span id="detailMapLocation">N/A</span>)</h4>
+            <div id="detailMapPlaceholder" class="map-placeholder">此圖對應單一儲位（如 I2-03）的局部放大截圖。</div>
+            <img id="detailMapImage" class="location-map detail-map" src="" alt="儲位局部放大圖">
+        </div>
+
+    </div>
+    
 </div>
 
 <script>
-    // ---------------------- 區塊一：貨品編號查詢 (JavaScript 邏輯) ----------------------
+    const staticMapPath = '/static/maps/'; // 圖片根目錄
+    const mapWrapper = document.getElementById('mapContainerWrapper');
+    const areaMapImage = document.getElementById('areaMapImage');
+    const detailMapImage = document.getElementById('detailMapImage');
+    const areaMapTitle = document.getElementById('areaMapTitle');
+    const detailMapTitle = document.getElementById('detailMapTitle');
+    const detailMapLocation = document.getElementById('detailMapLocation');
+
+    // ---------------------- 地圖顯示輔助函式 ----------------------
+    function toggleMapElements(imageEl, placeholderEl, show) {
+        if (show) {
+            imageEl.style.display = 'block';
+            placeholderEl.style.display = 'none';
+        } else {
+            imageEl.style.display = 'none';
+            placeholderEl.style.display = 'block';
+        }
+    }
+
+    function displayMaps(mapInfo, locationDesc) {
+        mapWrapper.style.display = 'flex'; // 顯示地圖容器
+
+        // 處理總覽地圖 (Area Map)
+        const areaMapPlaceholder = document.getElementById('areaMapPlaceholder');
+        if (mapInfo.area_map_filename) {
+            areaMapImage.src = staticMapPath + mapInfo.area_map_filename;
+            areaMapTitle.textContent = `${mapInfo.area_name} 總覽區域圖`;
+            toggleMapElements(areaMapImage, areaMapPlaceholder, true);
+        } else {
+            areaMapTitle.textContent = mapInfo.area_name;
+            areaMapPlaceholder.textContent = '未找到該區域的總覽地圖檔案。';
+            toggleMapElements(areaMapImage, areaMapPlaceholder, false);
+        }
+
+        // 處理局部細節地圖 (Detail Map)
+        const detailMapPlaceholder = document.getElementById('detailMapPlaceholder');
+        detailMapLocation.textContent = locationDesc;
+        detailMapTitle.textContent = `儲位局部放大圖 (${locationDesc})`;
+
+        if (mapInfo.detail_map_filename) {
+            detailMapImage.src = staticMapPath + mapInfo.detail_map_filename;
+            // 由於 detail_map_filename 就是 LocationDesc.png，即使檔案不存在，
+            // 瀏覽器也會嘗試載入，如果失敗會顯示 alt 文本
+            toggleMapElements(detailMapImage, detailMapPlaceholder, true);
+        } else {
+            detailMapPlaceholder.textContent = '此儲位無定義或無對應的局部放大截圖。';
+            toggleMapElements(detailMapImage, detailMapPlaceholder, false);
+        }
+    }
+    
+    function hideMaps() {
+        mapWrapper.style.display = 'none';
+    }
+
+    // ---------------------- 區塊一：貨品編號查詢 (精確查詢) ----------------------
     document.getElementById('queryFormId').addEventListener('submit', function(e) {
-        e.preventDefault(); // 阻止表單傳統提交
+        e.preventDefault();
         const productId = document.getElementById('product_id').value;
         const resultDiv = document.getElementById('resultId');
+        hideMaps(); // 隱藏地圖
         resultDiv.innerHTML = '<p>查詢中...</p>';
 
-        // 使用 Fetch API 發送 POST 請求到後端 /query 路由
         fetch('/query', {
             method: 'POST',
-            // Content-Type 設置為 x-www-form-urlencoded 模擬表單提交
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'product_id=' + encodeURIComponent(productId) // 傳遞輸入的 ID
-        })
-        .then(response => response.json()) // 解析 JSON 回應
-        .then(data => {
-            if (data.success) {
-                // 成功處理邏輯：根據是否為多筆庫存來動態生成 HTML
-                let htmlContent = `<p class="success">✅ 貨品編號：<strong>${data.product_id}</strong> 查詢成功！</p>`;
-                
-                if (data.is_multiple) {
-                    // 多筆結果顯示：使用 grid-template-columns: 2fr 2fr 1fr 1fr 來顯示多個位置的庫存
-                    // (HTML 內容生成細節略)
-                    htmlContent += '<p><strong>發現多筆庫存位置：</strong></p>';
-                    data.locations.forEach((loc, index) => {
-                         htmlContent += `
-                            <div class="location-item" style="grid-template-columns: 1fr 3fr;">
-                                <div><strong>${loc.location_floor}</strong></div>
-                                <div>${loc.location_desc}</div>
-                                
-                            </div>
-                        `;
-                    });
-                } else {
-                    // 單筆結果顯示：詳細顯示名稱、位置和庫存
-                    // (HTML 內容生成細節略)
-                    htmlContent += `
-                        <div class="location-item" style="grid-template-columns: 1fr 3fr;">
-                            <div><strong>${data.location_floor}</strong></div>
-                            <div>${data.location_desc}</div>
-                        </div>
-                        <p style="margin-top: 10px;"><strong>貨品名稱:</strong> ${data.product_name}</p>
-                    `;
-                }
-                resultDiv.innerHTML = htmlContent;
-            } else {
-                // 失敗處理：顯示錯誤訊息
-                resultDiv.innerHTML = `<p class="error">❌ 查詢失敗: ${data.message}</p>`;
-            }
-        })
-        .catch(error => {
-            // 連線錯誤處理
-            console.error('Fetch error:', error);
-            resultDiv.innerHTML = '<p class="error">連線錯誤，請檢查後端服務是否運行。</p>';
-        });
-    });
-
-    // ---------------------- 區塊二：貨品名稱關鍵字查詢 (JavaScript 邏輯) ----------------------
-    document.getElementById('queryFormName').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const keyword = document.getElementById('keyword').value;
-        const resultDiv = document.getElementById('resultName');
-        resultDiv.innerHTML = '<p>搜尋中...</p>';
-
-        // 發送 POST 請求到後端 /search_by_name 路由
-        fetch('/search_by_name', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'keyword=' + encodeURIComponent(keyword) // 傳遞關鍵字
+            body: 'product_id=' + encodeURIComponent(productId)
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // 成功處理邏輯：顯示搜尋到的總筆數
-                let htmlContent = `<p class="success">✅ 關鍵字 <strong>'${data.keyword}'</strong> 搜尋到 <strong>${data.count}</strong> 筆結果：</p>`;
+                let htmlContent = `<p class="success">✅ 貨品編號：<strong>${data.product_id}</strong> 查詢成功！</p>`;
                 
-                // 標題列：使用 .location-grid-header 來定義表格標題
-                // (HTML 內容生成細節略)
+                if (data.is_multiple) {
+                    // 多筆結果：只顯示列表，不顯示地圖
+                    htmlContent += '<p style="color:red; font-weight:bold;">🚨 發現多筆庫存位置，請使用名稱查詢結果後點擊單筆記錄來顯示地圖。</p>';
+                    // ... (多筆結果的列表渲染)
+                } else {
+                    // 單筆結果：顯示詳細資訊並載入地圖
+                    htmlContent += `<p>貨品名稱: <strong>${data.product_name}</strong></p>`;
+                    htmlContent += `<p>所在位置: <span class="location-desc">${data.location_desc}</span> (屬於: ${data.area_name})</p>`;
+                    htmlContent += `<p>庫存量: <strong>${data.current_qty}</strong> ${data.product_unit}</p>`;
+                    
+                    // 呼叫地圖顯示函式
+                    displayMaps(data, data.location_desc);
+                }
+                resultDiv.innerHTML = htmlContent;
+            } else {
+                resultDiv.innerHTML = `<p class="error">❌ 查詢失敗: ${data.message}</p>`;
+                hideMaps();
+            }
+        })
+        .catch(error => {
+            console.error('Fetch error:', error);
+            resultDiv.innerHTML = '<p class="error">連線錯誤，請檢查後端服務是否運行。</p>';
+            hideMaps();
+        });
+    });
 
-                // 遍歷所有結果：使用 .location-item 顯示每一筆記錄的詳細資訊
+    // ---------------------- 區塊二：貨品名稱關鍵字查詢 (模糊查詢) ----------------------
+    document.getElementById('queryFormName').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const keyword = document.getElementById('keyword').value;
+        const resultDiv = document.getElementById('resultName');
+        hideMaps(); // 隱藏地圖
+        resultDiv.innerHTML = '<p>搜尋中...</p>';
+
+        fetch('/search_by_name', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'keyword=' + encodeURIComponent(keyword)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let htmlContent = `<p class="success">✅ 關鍵字 <strong>'${data.keyword}'</strong> 搜尋到 <strong>${data.count}</strong> 筆結果，請點擊任一項目查看地圖：</p>`;
+                
+                // 標題列
+                htmlContent += `<div class="location-grid-header grid-header"><div>貨品編號</div><div>貨品名稱 / 區域</div><div>庫存量</div><div>單位</div></div>`;
+
+                // 遍歷所有結果
                 data.results.forEach((item) => {
+                    // 將所有地圖相關資訊儲存到 DOM 元素的 data 屬性，以便點擊時取用
                     htmlContent += `
-                        <div class="location-item">
+                        <div class="location-item" 
+                             data-location="${item.location_desc}"
+                             data-area-name="${item.area_name}"
+                             data-area-map="${item.area_map_filename}"
+                             data-detail-map="${item.detail_map_filename}">
                             <div class="location-id">${item.product_id}</div>
                             <div>
                                 <h4>${item.product_name}</h4>
-                                <p>位置: ${item.location_desc}</p>
+                                <p>位置: <span class="location-desc">${item.location_desc}</span> (${item.area_name})</p>
                             </div>
                             <div class="qty-unit">${item.current_qty}</div>
                             <div class="qty-label">${item.product_unit}</div>
@@ -158,13 +262,30 @@
                 });
 
                 resultDiv.innerHTML = htmlContent;
+
+                // 註冊點擊事件：點擊任一結果行，在地圖區塊顯示對應圖片
+                resultDiv.querySelectorAll('.location-item').forEach(item => {
+                    item.addEventListener('click', function() {
+                        // 移除所有選中狀態
+                        resultDiv.querySelectorAll('.location-item').forEach(el => el.classList.remove('selected'));
+                        this.classList.add('selected'); // 標記當前選中項
+
+                        const locationDesc = this.getAttribute('data-location');
+                        const mapInfo = {
+                            area_name: this.getAttribute('data-area-name'),
+                            area_map_filename: this.getAttribute('data-area-map'),
+                            detail_map_filename: this.getAttribute('data-detail-map')
+                        };
+                        
+                        displayMaps(mapInfo, locationDesc);
+                    });
+                });
+
             } else {
-                // 失敗處理：顯示錯誤訊息
                 resultDiv.innerHTML = `<p class="error">❌ 搜尋失敗: ${data.message}</p>`;
             }
         })
         .catch(error => {
-            // 連線錯誤處理
             console.error('Fetch error:', error);
             resultDiv.innerHTML = '<p class="error">連線錯誤，請檢查後端服務是否運行。</p>';
         });
@@ -173,3 +294,4 @@
 
 </body>
 </html>
+

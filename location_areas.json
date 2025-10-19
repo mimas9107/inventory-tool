@@ -1,0 +1,23 @@
+{
+    "RACKAGE": {
+        "prefix": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+        "area_name": "R區（穩定料架區）",
+        "area_map_filename": "Map_R_Area.png"
+    },
+    "INVENTORY_1F": {
+        "prefix": ["I1-"],
+        "area_name": "I區 1樓 (活動棧板區)",
+        "area_map_filename": "Map_I1F_Area.png"
+    },
+    "INVENTORY_2F": {
+        "prefix": ["I2-"],
+        "area_name": "I區 2樓 (活動棧板區)",
+        "area_map_filename": "Map_I2F_Area.png"
+    },
+    "INVENTORY_3F": {
+        "prefix": ["I3-"],
+        "area_name": "I區 3樓 (活動棧板區)",
+        "area_map_filename": "Map_I3F_Area.png"
+    }
+}
+
