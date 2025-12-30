@@ -1,3 +1,4 @@
+# ----布疋與成品-倉儲位置與庫存查詢（動態地圖版）----
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
 import json
@@ -9,7 +10,7 @@ AREA_CONFIG_FILE = 'location_areas.json'
 MAP_RULES = {}
 
 # Excel 欄位定義 (應與您的 Excel 標題列一致)
-COL_LOCATION_DESC = '所在位置'
+COL_LOCATION_DESC = '詳細位置'
 COL_PRODUCT_ID = '貨品編號'
 COL_PRODUCT_NAME = '貨品名稱'
 COL_UNIT = '貨品基本單位'
